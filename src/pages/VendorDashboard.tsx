@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -83,6 +82,14 @@ const VendorDashboard = () => {
             </Button>
           </div>
 
+          {vendor && vendor.status === 'final_awaiting_approval' && (
+            (!vendor.company_name || !vendor.registration_number || !vendor.pan_card || !vendor.gst_number) && (
+              <div className="mb-4 p-4 bg-yellow-100 text-yellow-800 rounded">
+                Please complete your business profile details to proceed with the approval process.
+              </div>
+            )
+          )}
+
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
@@ -120,13 +127,13 @@ const VendorDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <Button className="w-full" variant="outline">
+                  <Button className="w-full" variant="outline" disabled={vendor.status !== 'approved'} onClick={() => vendor.status === 'approved' && navigate('/vendor/add-product')}>
                     Add Products
                   </Button>
                   <Button className="w-full" variant="outline">
                     View Orders
                   </Button>
-                  <Button className="w-full" variant="outline">
+                  <Button className="w-full" variant="outline" onClick={() => navigate('/profile')}>
                     Update Profile
                   </Button>
                 </div>

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -24,32 +23,37 @@ const VendorLogin = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
+      // Allow login for any vendor with valid credentials, regardless of status
+      let { data, error } = await supabase
         .from("vendors")
         .select("*")
         .eq("username", formData.username)
         .eq("password", formData.password)
-        .eq("status", "completed")
         .single();
 
-      if (error || !data) {
-        throw new Error("Invalid credentials or account not activated");
+      if (!data) {
+        throw new Error("Invalid credentials");
       }
 
-      // Store vendor session (you might want to use a proper session management)
+      // Store vendor session
       localStorage.setItem("vendor_session", JSON.stringify(data));
-
       toast({
         title: "Login Successful",
         description: "Welcome to your vendor dashboard!",
       });
-
+      if (data.status === 'final_awaiting_approval') {
+        navigate('/vendor/reset-password');
+        return;
+      }
+      toast({
+        title: "Password Reset Successful",
+        description: "You can now use your new password.",
+      });
       navigate("/vendor/dashboard");
     } catch (error: any) {
-      console.error("Login error:", error);
       toast({
         title: "Login Failed",
-        description: "Invalid credentials or account not activated.",
+        description: "Invalid credentials.",
         variant: "destructive",
       });
     } finally {
@@ -93,7 +97,6 @@ const VendorLogin = () => {
                     placeholder="Enter your username"
                   />
                 </div>
-
                 <div>
                   <Label htmlFor="password">Password</Label>
                   <Input
@@ -106,7 +109,6 @@ const VendorLogin = () => {
                     placeholder="Enter your password"
                   />
                 </div>
-
                 <Button
                   type="submit"
                   className="w-full"
@@ -115,7 +117,6 @@ const VendorLogin = () => {
                   {loading ? "Logging in..." : "Login"}
                 </Button>
               </form>
-
               <div className="mt-4 text-center">
                 <p className="text-sm text-muted-foreground">
                   New vendor?{" "}

@@ -1,4 +1,3 @@
-
 -- Create vendors table for the vendor registration and approval system
 CREATE TABLE public.vendors (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -15,7 +14,8 @@ CREATE TABLE public.vendors (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   approved_at TIMESTAMP WITH TIME ZONE,
-  approved_by UUID REFERENCES auth.users(id)
+  approved_by UUID REFERENCES auth.users(id),
+  city TEXT
 );
 
 -- Add Row Level Security (RLS) to the vendors table

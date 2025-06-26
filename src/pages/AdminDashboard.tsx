@@ -8,7 +8,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingVendors, setPendingVendors] = useState<any[]>([]);
-  const [awaitingVendors, setAwaitingVendors] = useState<any[]>([]);
+  const [awaitingAdminVendors, setAwaitingAdminVendors] = useState<any[]>([]);
   const [finalizingVendor, setFinalizingVendor] = useState<any | null>(null);
   const [finalUsername, setFinalUsername] = useState("");
   const [finalPassword, setFinalPassword] = useState("");
@@ -43,31 +43,59 @@ export default function AdminDashboard() {
 
   const fetchVendors = async () => {
     setLoading(true);
-    const { data: pending, error: err1 } = await supabase
+    const { data: pending } = await supabase
       .from("vendors")
       .select("*")
       .eq("status", "pending_approval");
-    const { data: awaiting, error: err2 } = await supabase
+    const { data: awaitingAdmin } = await supabase
       .from("vendors")
       .select("*")
-      .eq("status", "awaiting_final_approval");
+      .eq("status", "awaiting_admin_approval");
     setPendingVendors(pending || []);
-    setAwaitingVendors(awaiting || []);
+    setAwaitingAdminVendors(awaitingAdmin || []);
     setLoading(false);
   };
 
-  // Approve pending vendor: generate secure link, update status
+  // Approve pending vendor: generate password, update status, send email
   const approvePendingVendor = async (vendor: any) => {
     setLoading(true);
-    // Generate a secure token (simulate)
+    // Generate random password
+    const randomPassword = Math.random().toString(36).slice(-8) + Math.floor(Math.random() * 1000);
     const token = Math.random().toString(36).substring(2) + Date.now();
+    // Update vendor in Supabase: set status, username, password, secure_token
     const { error } = await supabase
       .from("vendors")
-      .update({ status: "awaiting_final_approval", secure_token: token })
+      .update({
+        status: "final_awaiting_approval",
+        secure_token: token,
+        username: vendor.email,
+        password: randomPassword,
+      })
       .eq("id", vendor.id);
+
     if (!error) {
-      setSecureLink(`${window.location.origin}/vendor/details?token=${token}`);
-      setMessage(`Secure link generated for ${vendor.email}. Send this to the vendor.`);
+      // Send email to vendor (type: initial)
+      await fetch('http://localhost:4000/send-vendor-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: vendor.email,
+          username: vendor.email,
+          password: randomPassword,
+          type: 'initial',
+        }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        setMessage(`Credentials and instructions sent to ${vendor.email}.`);
+        fetchVendors();
+      })
+      .catch(err => {
+        setMessage('Failed to send email. Please try again later.');
+        fetchVendors();
+      });
+    } else {
+      setMessage('Failed to update vendor in database.');
       fetchVendors();
     }
     setLoading(false);
@@ -81,10 +109,10 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  // Final approval: set username/password, update status to active
+  // Final approval: set status to approved, send approval email
   const handleFinalApproval = async (vendor: any) => {
     setFinalizingVendor(vendor);
-    setFinalUsername("");
+    setFinalUsername(vendor.username || "");
     setFinalPassword("");
     setMessage("");
   };
@@ -95,12 +123,20 @@ export default function AdminDashboard() {
     await supabase
       .from("vendors")
       .update({
-        username: finalUsername,
-        password: finalPassword,
-        status: "active",
+        status: "approved",
       })
       .eq("id", finalizingVendor.id);
-    setMessage(`Credentials for ${finalizingVendor.email}: Username: ${finalUsername}, Password: ${finalPassword}`);
+    // Send final approval email (type: final)
+    await fetch('http://localhost:4000/send-vendor-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: finalizingVendor.email,
+        username: finalizingVendor.email,
+        type: 'final',
+      }),
+    });
+    setMessage(`Final approval email sent to ${finalizingVendor.email}.`);
     setFinalizing(false);
     setFinalizingVendor(null);
     fetchVendors();
@@ -147,18 +183,20 @@ export default function AdminDashboard() {
         ))}
 
         <h2 className="text-xl font-bold mb-2 mt-8">Vendors Awaiting Final Approval</h2>
-        {awaitingVendors.length === 0 && <div>No vendors awaiting final approval.</div>}
-        {awaitingVendors.map(vendor => (
-          <div key={vendor.id} className="mb-4 p-4 border rounded bg-white">
-            <div><b>Name:</b> {vendor.name}</div>
-            <div><b>Email:</b> {vendor.email}</div>
-            <div><b>Company:</b> {vendor.company_name}</div>
-            <div><b>GST:</b> {vendor.gst_number}</div>
-            <div><b>Business Address:</b> {vendor.business_address}</div>
-            <div className="mt-2">
-              <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => handleFinalApproval(vendor)}>Final Approve & Assign Credentials</button>
+        {awaitingAdminVendors.length === 0 && <div>No vendors awaiting final approval.</div>}
+        {awaitingAdminVendors
+          .filter(vendor => vendor.status === 'awaiting_admin_approval')
+          .map(vendor => (
+            <div key={vendor.id} className="mb-4 p-4 border rounded bg-white">
+              <div><b>Name:</b> {vendor.name}</div>
+              <div><b>Email:</b> {vendor.email}</div>
+              <div><b>Company:</b> {vendor.company_name}</div>
+              <div><b>GST:</b> {vendor.gst_number}</div>
+              <div><b>Business Address:</b> {vendor.business_address}</div>
+              <div className="mt-2">
+                <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => handleFinalApproval(vendor)}>Final Approve</button>
+              </div>
             </div>
-          </div>
         ))}
 
         {/* Final approval modal/section */}
