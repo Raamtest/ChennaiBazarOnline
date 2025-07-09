@@ -64,10 +64,24 @@ const Profile = () => {
   useEffect(() => {
     async function logUser() {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log("Supabase Auth User:", user);
+      //console.log(user.id);
+      console.log("Auth UID:", user?.id);
+    console.log("Vendor ID:", vendor?.id);
     }
     logUser();
+  }, [vendor]);
+
+  useEffect(() => {
+    async function checkSession() {
+      const { data, error } = await supabase.auth.getSession();
+      console.log("Supabase Session:", data?.session);
+      if (error) {
+        console.error("Session fetch error:", error.message);
+      }
+    }
+    checkSession();
   }, []);
+  
 
   const uploadImage = async (file: File, path: string) => {
     const { data, error } = await supabase.storage.from("vendor-docs").upload(path, file, { upsert: true });

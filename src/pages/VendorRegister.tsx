@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,53 +9,43 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
-const VendorRegister = () => {
+const VendorRegistration = () => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: "",
+    mobile: "",
   });
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
+    setMessage("");
     try {
-      const { data, error } = await supabase
-        .from("vendors")
-        .insert([formData])
-        .select();
-
-      if (error) {
-        throw error;
+      const response = await fetch("http://localhost:4000/registerVendor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const result = await response.json();
+      if (result.error) {
+        setMessage("Registration failed: " + result.error);
+        console.error("Backend error:", result.error);
+      } else {
+        setMessage("Vendor registered successfully! Please check your email for login details.");
       }
-
-      toast({
-        title: "Registration Successful",
-        description: "Your vendor registration has been submitted for review. You will be contacted once approved.",
-      });
-
-      navigate("/");
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      toast({
-        title: "Registration Failed",
-        description: error.message || "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      setMessage("An error occurred. Please try again.");
+      console.error("Network or JS error:", err);
     }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setLoading(false);
   };
 
   return (
@@ -77,7 +66,7 @@ const VendorRegister = () => {
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="name">Name</Label>
                   <Input
                     id="name"
                     name="name"
@@ -85,7 +74,7 @@ const VendorRegister = () => {
                     value={formData.name}
                     onChange={handleChange}
                     required
-                    placeholder="Enter your full name"
+                    placeholder="Enter your name"
                   />
                 </div>
 
@@ -103,15 +92,15 @@ const VendorRegister = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <Label htmlFor="mobile">Mobile Number</Label>
                   <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    value={formData.phone}
+                    id="mobile"
+                    name="mobile"
+                    type="text"
+                    value={formData.mobile}
                     onChange={handleChange}
                     required
-                    placeholder="Enter your phone number"
+                    placeholder="Enter your mobile number"
                   />
                 </div>
 
@@ -120,9 +109,11 @@ const VendorRegister = () => {
                   className="w-full"
                   disabled={loading}
                 >
-                  {loading ? "Submitting..." : "Submit Registration"}
+                  {loading ? "Registering..." : "Register"}
                 </Button>
               </form>
+
+              {message && <div className="mt-4 text-center text-red-600">{message}</div>}
 
               <div className="mt-4 text-center">
                 <p className="text-sm text-muted-foreground">
@@ -146,4 +137,4 @@ const VendorRegister = () => {
   );
 };
 
-export default VendorRegister;
+export default VendorRegistration;

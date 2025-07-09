@@ -1,13 +1,20 @@
-
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect } from "react";
+import ProductCard from "@/components/ProductCard";
+import SubcategoryProducts from "@/pages/SubcategoryProducts";
 
 const CategoryDetail = () => {
   const { categoryName } = useParams<{ categoryName: string }>();
+  const navigate = useNavigate();
+
+  const [fetchedSubcategories, setFetchedSubcategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const subcategories: Record<string, Array<{ name: string; description: string; itemCount: string; image: string; slug: string }>> = {
     electronics: [
@@ -46,7 +53,38 @@ const CategoryDetail = () => {
 
   const handleSubcategoryClick = (subcategorySlug: string) => {
     // Navigate to subcategory products page
-    window.location.href = `/categories/${categoryName}/subcategory/${subcategorySlug}`;
+    navigate(`/categories/${categoryName}/subcategory/${subcategorySlug}`);
+  };
+
+  useEffect(() => {
+    const fetchSubcategories = async () => {
+      if (!categoryName) return;
+      setLoading(true);
+      // Adjust the query to match your DB schema
+      const { data, error } = await supabase
+        .from("products")
+        .select("subcategory, description, image") // add more fields as needed
+        .eq("category", categoryName);
+
+      if (!error && data) {
+        // Optionally, group by subcategory or process as needed
+        setFetchedSubcategories(data);
+      }
+      setLoading(false);
+    };
+
+    fetchSubcategories();
+  }, [categoryName, navigate]);
+
+  const subcategoriesToShow =
+    fetchedSubcategories.length > 0 ? fetchedSubcategories : categorySubcategories;
+
+  const categoryIcons = {
+    electronics: "📱",
+    fashion: "👗",
+    "food-grocery": "🥬",
+    "home-garden": "🪑",
+    // add more as needed
   };
 
   return (
@@ -70,29 +108,33 @@ const CategoryDetail = () => {
             </p>
           </div>
           
-          {categorySubcategories.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {categorySubcategories.map((subcategory, index) => (
-                <Card 
-                  key={index} 
-                  className="card-hover cursor-pointer"
-                  onClick={() => handleSubcategoryClick(subcategory.slug)}
-                >
-                  <CardContent className="p-6 text-center">
-                    <div className="text-4xl mb-4">{subcategory.image}</div>
-                    <h3 className="text-lg font-semibold mb-2">{subcategory.name}</h3>
-                    <p className="text-sm text-muted-foreground mb-2">{subcategory.description}</p>
-                    <p className="text-xs text-primary font-medium">{subcategory.itemCount}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+          {loading ? (
+            <div>Loading...</div>
           ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground text-lg">
-                Subcategories for {displayName} are coming soon!
-              </p>
-            </div>
+            subcategoriesToShow.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {subcategoriesToShow.map((subcategory, index) => (
+                  <Card 
+                    key={index} 
+                    className="card-hover cursor-pointer"
+                    onClick={() => handleSubcategoryClick(subcategory.slug)}
+                  >
+                    <CardContent className="p-6 text-center">
+                      <div className="text-4xl mb-4">{subcategory.image}</div>
+                      <h3 className="text-lg font-semibold mb-2">{subcategory.name}</h3>
+                      <p className="text-sm text-muted-foreground mb-2">{subcategory.description}</p>
+                      <p className="text-xs text-primary font-medium">{subcategory.itemCount}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg">
+                  Subcategories for {displayName} are coming soon!
+                </p>
+              </div>
+            )
           )}
         </div>
       </section>

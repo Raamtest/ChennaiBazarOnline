@@ -1,4 +1,3 @@
-
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
@@ -22,7 +21,7 @@ const SubcategoryProducts = () => {
         .from('products')
         .select('*')
         .eq('category', categoryName.toLowerCase())
-        .eq('subcategory', subcategoryName.toLowerCase().replace(/\s+/g, '-'))
+        .eq('subcategory', subcategoryName)
         .order('created_at', { ascending: false });
       
       if (error) {

@@ -42,6 +42,7 @@ const ProductCard = ({ product, onAddToCart, onAddToWishlist }: ProductCardProps
         .eq('user_id', user.id)
         .eq('product_id', product.id)
         .single();
+        console.log("WishListData:",data);
       
       if (!error && data) {
         setIsInWishlist(true);
@@ -63,15 +64,43 @@ const ProductCard = ({ product, onAddToCart, onAddToWishlist }: ProductCardProps
 
     setLoading(true);
     try {
-      const { error } = await supabase.from('cart').upsert({
-        user_id: user.id,
-        product_id: product.id,
-        quantity: 1,
-      }, {
-        onConflict: 'user_id,product_id'
-      });
+      const { data: existing, error: fetchError } = await supabase
+      .from("cart")
+      .select("id, quantity")
+      .eq("user_id", user.id)
+      .eq("product_id", product.id)
+      .maybeSingle();
 
-      if (error) throw error;
+    if (fetchError) throw fetchError;
+
+    if (existing) {
+      // update quantity
+      const { error: updateError } = await supabase
+        .from("cart")
+        .update({ quantity: existing.quantity + 1 })
+        .eq("id", existing.id);
+
+      if (updateError) throw updateError;
+    } else {
+      // const { error } = await supabase.from('cart').upsert({
+      //   user_id: user.id,
+      //   product_id: product.id,
+      //   quantity: 1,
+      // }, {
+      //   onConflict: 'user_id,product_id'
+      // });
+
+      // if (error) throw error;
+      const { error: insertError } = await supabase
+        .from("cart")
+        .insert({
+          user_id: user.id,
+          product_id: product.id,
+          quantity: 1,
+        });
+
+      if (insertError) throw insertError;
+    }
 
       toast({
         title: "Added to Cart",

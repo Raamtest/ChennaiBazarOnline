@@ -1,8 +1,38 @@
+// 
+
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
@@ -13,36 +43,59 @@ export default function AdminDashboard() {
   const [finalUsername, setFinalUsername] = useState("");
   const [finalPassword, setFinalPassword] = useState("");
   const [finalizing, setFinalizing] = useState(false);
-  const [secureLink, setSecureLink] = useState("");
   const [message, setMessage] = useState("");
+  const [orders, setOrders] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
         navigate("/admin/login");
         return;
       }
+      
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .single();
+        
       if (profileError || !profile || profile.role !== "admin") {
         navigate("/not-authorized");
       } else {
         setIsAdmin(true);
-        fetchVendors();
+        fetchAllData();
       }
       setLoading(false);
     };
     checkAdmin();
-    // eslint-disable-next-line
   }, [navigate]);
 
-  const fetchVendors = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
+    try {
+      await Promise.all([
+        fetchVendors(),
+        fetchOrders(),
+        fetchUsers()
+      ]);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchVendors = async () => {
     const { data: pending } = await supabase
       .from("vendors")
       .select("*")
@@ -53,16 +106,45 @@ export default function AdminDashboard() {
       .eq("status", "awaiting_admin_approval");
     setPendingVendors(pending || []);
     setAwaitingAdminVendors(awaitingAdmin || []);
-    setLoading(false);
   };
 
-  // Approve pending vendor: generate password, update status, send email
+  const fetchOrders = async () => {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(`
+        id,
+        created_at,
+        total_amount,
+        status
+      `)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setOrders(data || []);
+    } else {
+      console.error("Error fetching orders:", error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, username, role, created_at")
+      .order("created_at", { ascending: false });
+      console.log("data:",data);
+
+    if (!error) {
+      setUsers(data || []);
+    } else {
+      console.error("Error fetching users:", error);
+    }
+  };
+
   const approvePendingVendor = async (vendor: any) => {
     setLoading(true);
-    // Generate random password
     const randomPassword = Math.random().toString(36).slice(-8) + Math.floor(Math.random() * 1000);
     const token = Math.random().toString(36).substring(2) + Date.now();
-    // Update vendor in Supabase: set status, username, password, secure_token
+    
     const { error } = await supabase
       .from("vendors")
       .update({
@@ -74,73 +156,144 @@ export default function AdminDashboard() {
       .eq("id", vendor.id);
 
     if (!error) {
-      // Send email to vendor (type: initial)
-      await fetch('http://localhost:4000/send-vendor-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: vendor.email,
-          username: vendor.email,
-          password: randomPassword,
-          type: 'initial',
-        }),
-      })
-      .then(res => res.json())
-      .then(data => {
-        setMessage(`Credentials and instructions sent to ${vendor.email}.`);
+      try {
+        await fetch('http://localhost:4000/send-vendor-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: vendor.email,
+            username: vendor.email,
+            password: randomPassword,
+            type: 'initial',
+          }),
+        });
+        toast({
+          title: "Success",
+          description: `Credentials sent to ${vendor.email}`,
+        });
         fetchVendors();
-      })
-      .catch(err => {
-        setMessage('Failed to send email. Please try again later.');
-        fetchVendors();
-      });
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to send email",
+          variant: "destructive",
+        });
+      }
     } else {
-      setMessage('Failed to update vendor in database.');
-      fetchVendors();
+      toast({
+        title: "Error",
+        description: "Failed to update vendor",
+        variant: "destructive",
+      });
     }
     setLoading(false);
   };
 
-  // Reject pending vendor
   const rejectPendingVendor = async (vendor: any) => {
     setLoading(true);
-    await supabase.from("vendors").update({ status: "rejected" }).eq("id", vendor.id);
-    fetchVendors();
+    const { error } = await supabase
+      .from("vendors")
+      .update({ status: "rejected" })
+      .eq("id", vendor.id);
+    
+    if (!error) {
+      toast({
+        title: "Success",
+        description: "Vendor rejected",
+      });
+      fetchVendors();
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to reject vendor",
+        variant: "destructive",
+      });
+    }
     setLoading(false);
   };
 
-  // Final approval: set status to approved, send approval email
   const handleFinalApproval = async (vendor: any) => {
     setFinalizingVendor(vendor);
     setFinalUsername(vendor.username || "");
     setFinalPassword("");
-    setMessage("");
   };
 
   const submitFinalApproval = async () => {
     if (!finalizingVendor) return;
     setFinalizing(true);
-    await supabase
+    
+    const { error } = await supabase
       .from("vendors")
-      .update({
-        status: "approved",
-      })
+      .update({ status: "approved" })
       .eq("id", finalizingVendor.id);
-    // Send final approval email (type: final)
-    await fetch('http://localhost:4000/send-vendor-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: finalizingVendor.email,
-        username: finalizingVendor.email,
-        type: 'final',
-      }),
-    });
-    setMessage(`Final approval email sent to ${finalizingVendor.email}.`);
+
+    if (!error) {
+      try {
+        await fetch('http://localhost:4000/send-vendor-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: finalizingVendor.email,
+            username: finalUsername,
+            password: finalPassword,
+            type: 'final',
+          }),
+        });
+        toast({
+          title: "Success",
+          description: `Final approval sent to ${finalizingVendor.email}`,
+        });
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to send email",
+          variant: "destructive",
+        });
+      }
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to approve vendor",
+        variant: "destructive",
+      });
+    }
+    
     setFinalizing(false);
     setFinalizingVendor(null);
     fetchVendors();
   };
+
+  const updateUserRole = async (userId: string, newRole: string) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ role: newRole })
+      .eq("id", userId);
+    
+    if (!error) {
+      toast({
+        title: "Success",
+        description: "User role updated",
+      });
+      fetchUsers();
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to update user role",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredUsers = users.filter(user =>
+    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredOrders = orders.filter(order =>
+    order.id.includes(searchTerm) ||
+    order.profiles?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loading) {
     return (
@@ -159,76 +312,392 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <div className="container mx-auto px-4 py-16">
-        <h1 className="text-3xl font-bold gradient-text mb-4">Admin Dashboard</h1>
-        <p className="text-muted-foreground mb-8">Welcome, Admin! Here you can manage vendor approvals.</p>
-
-        {message && <div className="mb-4 p-4 bg-green-100 text-green-800 rounded">{message}</div>}
-        {secureLink && <div className="mb-4 p-4 bg-blue-100 text-blue-800 rounded break-all">Secure Link: <a href={secureLink} className="underline">{secureLink}</a></div>}
-
-        <h2 className="text-xl font-bold mb-2">Pending Vendor Approvals</h2>
-        {pendingVendors.length === 0 && <div className="mb-6">No pending vendors.</div>}
-        {pendingVendors.map(vendor => (
-          <div key={vendor.id} className="mb-4 p-4 border rounded bg-white flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <div><b>Name:</b> {vendor.name}</div>
-              <div><b>Email:</b> {vendor.email}</div>
-              <div><b>Phone:</b> {vendor.phone}</div>
-            </div>
-            <div className="mt-2 md:mt-0 flex gap-2">
-              <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={() => approvePendingVendor(vendor)}>Approve</button>
-              <button className="bg-red-600 text-white px-4 py-2 rounded" onClick={() => rejectPendingVendor(vendor)}>Reject</button>
-            </div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Sidebar */}
+          <div className="w-full md:w-64 flex-shrink-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Menu</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button
+                  variant={activeTab === "dashboard" ? "default" : "ghost"}
+                  className="w-full justify-start"
+                  onClick={() => setActiveTab("dashboard")}
+                >
+                  Dashboard
+                </Button>
+                <Button
+                  variant={activeTab === "vendors" ? "default" : "ghost"}
+                  className="w-full justify-start"
+                  onClick={() => setActiveTab("vendors")}
+                >
+                  Vendor Approvals
+                </Button>
+                <Button
+                  variant={activeTab === "users" ? "default" : "ghost"}
+                  className="w-full justify-start"
+                  onClick={() => setActiveTab("users")}
+                >
+                  User Management
+                </Button>
+                <Button
+                  variant={activeTab === "orders" ? "default" : "ghost"}
+                  className="w-full justify-start"
+                  onClick={() => setActiveTab("orders")}
+                >
+                  Order Management
+                </Button>
+              </CardContent>
+            </Card>
           </div>
-        ))}
 
-        <h2 className="text-xl font-bold mb-2 mt-8">Vendors Awaiting Final Approval</h2>
-        {awaitingAdminVendors.length === 0 && <div>No vendors awaiting final approval.</div>}
-        {awaitingAdminVendors
-          .filter(vendor => vendor.status === 'awaiting_admin_approval')
-          .map(vendor => (
-            <div key={vendor.id} className="mb-4 p-4 border rounded bg-white">
-              <div><b>Name:</b> {vendor.name}</div>
-              <div><b>Email:</b> {vendor.email}</div>
-              <div><b>Company:</b> {vendor.company_name}</div>
-              <div><b>GST:</b> {vendor.gst_number}</div>
-              <div><b>Business Address:</b> {vendor.business_address}</div>
-              <div className="mt-2">
-                <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => handleFinalApproval(vendor)}>Final Approve</button>
-              </div>
-            </div>
-        ))}
+          {/* Main Content */}
+          <div className="flex-1">
+            {activeTab === "dashboard" && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Admin Dashboard</CardTitle>
+                    <CardDescription>
+                      Welcome to the admin panel. Manage your platform from here.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="bg-blue-50">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Total Users</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{users.length}</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-green-50">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Active Vendors</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">
+                          {awaitingAdminVendors.filter(v => v.status === 'approved').length}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-purple-50">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Total Orders</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold">{orders.length}</div>
+                      </CardContent>
+                    </Card>
+                  </CardContent>
+                </Card>
 
-        {/* Final approval modal/section */}
-        {finalizingVendor && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-              <h3 className="text-xl font-bold mb-4">Assign Credentials to Vendor</h3>
-              <div className="mb-2"><b>Name:</b> {finalizingVendor.name}</div>
-              <div className="mb-2"><b>Email:</b> {finalizingVendor.email}</div>
-              <input
-                type="text"
-                placeholder="Username"
-                className="w-full mb-2 p-2 border rounded"
-                value={finalUsername}
-                onChange={e => setFinalUsername(e.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Password"
-                className="w-full mb-4 p-2 border rounded"
-                value={finalPassword}
-                onChange={e => setFinalPassword(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={submitFinalApproval} disabled={finalizing}>Approve & Send Credentials</button>
-                <button className="bg-gray-400 text-white px-4 py-2 rounded" onClick={() => setFinalizingVendor(null)}>Cancel</button>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Orders</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Order ID</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orders.slice(0, 5).map(order => (
+                          <TableRow key={order.id}>
+                            <TableCell className="font-medium">#{order.id.slice(0, 8)}</TableCell>
+                            <TableCell>{order.profiles?.full_name || order.profiles?.email}</TableCell>
+                            <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                            <TableCell>₹{order.total_amount.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                                {order.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
               </div>
-            </div>
+            )}
+
+            {activeTab === "vendors" && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pending Vendor Approvals</CardTitle>
+                    <CardDescription>
+                      Review and approve new vendor applications
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {pendingVendors.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No pending vendors
+                      </div>
+                    ) : (
+                      pendingVendors.map(vendor => (
+                        <Card key={vendor.id}>
+                          <CardHeader>
+                            <CardTitle>{vendor.company_name}</CardTitle>
+                            <CardDescription>{vendor.name} • {vendor.email}</CardDescription>
+                          </CardHeader>
+                          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p><strong>Phone:</strong> {vendor.phone}</p>
+                              <p><strong>GST:</strong> {vendor.gst_number}</p>
+                              <p><strong>Business Address:</strong> {vendor.business_address}</p>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                variant="destructive"
+                                onClick={() => rejectPendingVendor(vendor)}
+                              >
+                                Reject
+                              </Button>
+                              <Button
+                                onClick={() => approvePendingVendor(vendor)}
+                              >
+                                Approve
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Vendors Awaiting Final Approval</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {awaitingAdminVendors.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No vendors awaiting final approval
+                      </div>
+                    ) : (
+                      awaitingAdminVendors.map(vendor => (
+                        <Card key={vendor.id}>
+                          <CardHeader>
+                            <CardTitle>{vendor.company_name}</CardTitle>
+                            <CardDescription>{vendor.name} • {vendor.email}</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <p><strong>Username:</strong> {vendor.username}</p>
+                                <p><strong>Business Details:</strong> {vendor.business_details}</p>
+                              </div>
+                              <div className="flex justify-end">
+                                <Button onClick={() => handleFinalApproval(vendor)}>
+                                  Final Approval
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "users" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Management</CardTitle>
+                  <CardDescription>
+                    Manage all user accounts and permissions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <Input
+                      placeholder="Search users by name or email"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Joined</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredUsers.map(user => (
+                        <TableRow key={user.id}>
+                          <TableCell>{user.full_name || "No name"}</TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            {new Date(user.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={user.role}
+                              onValueChange={(value) => updateUserRole(user.id, value)}
+                            >
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Select role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="user">User</SelectItem>
+                                <SelectItem value="vendor">Vendor</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm">
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === "orders" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Order Management</CardTitle>
+                  <CardDescription>
+                    View and manage all customer orders
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* <div className="mb-4">
+                    <Input
+                      placeholder="Search orders by ID, name or email"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div> */}
+                  <div className="space-y-4">
+                    {filteredOrders.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No orders found
+                      </div>
+                    ) : (
+                      // filteredOrders.map(order => (
+                        orders.map(order => (
+                        <Card key={order.id}>
+                          <CardHeader>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <CardTitle>Order #{order.id.slice(0, 8)}</CardTitle>
+                                <CardDescription>
+                                  {order.profiles?.full_name || order.profiles?.email}
+                                </CardDescription>
+                              </div>
+                              <Badge variant="outline">
+                                {order.status}
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <h4 className="font-medium mb-2">Order Details</h4>
+                                <p>Date: {new Date(order.created_at).toLocaleString()}</p>
+                                <p>Total: ₹{order.total_amount.toFixed(2)}</p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium mb-2">Items</h4>
+                                <ul className="list-disc list-inside">
+                                  {order.order_items?.map(item => (
+                                    <li key={item.id}>
+                                      {item.products?.name} × {item.quantity}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="flex justify-end items-end">
+                                <Button variant="outline" size="sm">
+                                  View Details
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Final Approval Modal */}
+      {finalizingVendor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Final Vendor Approval</CardTitle>
+              <CardDescription>
+                Set credentials for {finalizingVendor.company_name}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  value={finalUsername}
+                  onChange={(e) => setFinalUsername(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={finalPassword}
+                  onChange={(e) => setFinalPassword(e.target.value)}
+                  placeholder="Leave blank to keep existing"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setFinalizingVendor(null)}
+                  disabled={finalizing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={submitFinalApproval}
+                  disabled={finalizing}
+                >
+                  {finalizing ? "Processing..." : "Approve Vendor"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       <Footer />
     </div>
   );
-} 
+}

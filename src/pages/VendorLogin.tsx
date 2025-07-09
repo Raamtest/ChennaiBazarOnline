@@ -1,142 +1,77 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
+import React, { useState } from "react";
 
-const VendorLogin = () => {
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
-  const navigate = useNavigate();
+const VendorOtpLogin = () => {
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState(1);
+  const [message, setMessage] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1: Request OTP
+  const handleRequestOtp = async (e) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      // Allow login for any vendor with valid credentials, regardless of status
-      let { data, error } = await supabase
-        .from("vendors")
-        .select("*")
-        .eq("username", formData.username)
-        .eq("password", formData.password)
-        .single();
-
-      if (!data) {
-        throw new Error("Invalid credentials");
-      }
-
-      // Store vendor session
-      localStorage.setItem("vendor_session", JSON.stringify(data));
-      toast({
-        title: "Login Successful",
-        description: "Welcome to your vendor dashboard!",
-      });
-      if (data.status === 'final_awaiting_approval') {
-        navigate('/vendor/reset-password');
-        return;
-      }
-      toast({
-        title: "Password Reset Successful",
-        description: "You can now use your new password.",
-      });
-      navigate("/vendor/dashboard");
-    } catch (error: any) {
-      toast({
-        title: "Login Failed",
-        description: "Invalid credentials.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    setMessage("");
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    if (error) {
+      setMessage("Failed to send OTP: " + error.message);
+    } else {
+      setMessage("OTP sent! Check your email.");
+      setStep(2);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
+  // Step 2: Verify OTP
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: "email",
     });
+    if (error) {
+      setMessage("OTP verification failed: " + error.message);
+    } else {
+      setMessage("Login successful!");
+      // Redirect or update UI as needed
+    }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-md mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl gradient-text text-center">
-                Vendor Login
-              </CardTitle>
-              <p className="text-center text-muted-foreground">
-                Access your vendor dashboard
-              </p>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    name="username"
-                    type="text"
-                    value={formData.username}
-                    onChange={handleChange}
-                    required
-                    placeholder="Enter your username"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    placeholder="Enter your password"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={loading}
-                >
-                  {loading ? "Logging in..." : "Login"}
-                </Button>
-              </form>
-              <div className="mt-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  New vendor?{" "}
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto"
-                    onClick={() => navigate("/vendor/register")}
-                  >
-                    Register here
-                  </Button>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      
-      <Footer />
+    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded shadow">
+      <h2 className="text-2xl font-bold mb-4">Vendor OTP Login</h2>
+      {step === 1 ? (
+        <form onSubmit={handleRequestOtp} className="space-y-4">
+          <input
+            type="email"
+            placeholder="Email"
+            required
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="w-full border p-2 rounded"
+          />
+          <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded">
+            Send OTP
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Enter OTP"
+            required
+            value={otp}
+            onChange={e => setOtp(e.target.value)}
+            className="w-full border p-2 rounded"
+          />
+          <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded">
+            Verify OTP
+          </button>
+        </form>
+      )}
+      {message && <div className="mt-4 text-center text-red-600">{message}</div>}
     </div>
   );
 };
 
-export default VendorLogin;
+export default VendorOtpLogin;

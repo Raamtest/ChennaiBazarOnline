@@ -2,10 +2,18 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://lqsswdliviecpudrebno.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxc3N3ZGxpdmllY3B1ZHJlYm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2MjM5MzYsImV4cCI6MjA2NTE5OTkzNn0.rgVzGsL9hLZ0jGkzpQSAzLL-DUNVYiQxFrVHh5HQZyw";
+//const SUPABASE_URL = "https://lqsswdliviecpudrebno.supabase.co";
+//const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxc3N3ZGxpdmllY3B1ZHJlYm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2MjM5MzYsImV4cCI6MjA2NTE5OTkzNn0.rgVzGsL9hLZ0jGkzpQSAzLL-DUNVYiQxFrVHh5HQZyw";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+//export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+
+export const supabase = createClient(
+    'https://oqqqlvxgjwkboqbrctbr.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcXFsdnhnandrYm9xYnJjdGJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0Njg3MDYsImV4cCI6MjA2NzA0NDcwNn0.uE84gK8NeB2qfqbhnTKYjPHsCumQJKpWJFXWQf3hJFE'
+  );
+
+//console.log("Supabase client initialized with key:", 'YOUR_ANeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxc3N3ZGxpdmllY3B1ZHJlYm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0Mjk0MDgsImV4cCI6MjA2NzAwNTQwOH0.xGKhbcJ9hNWMwCgHfYEDFQqYtfZOC3I1LnfnkyM6jSUON_KEY');
